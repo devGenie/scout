@@ -1,0 +1,37 @@
+version: '3'
+services:
+  scout: 
+    image: scout
+    volumes:
+      - .:/scout
+    environment:
+      - SERVICE_PORTS=8091
+    networks:
+      - scout
+    deploy:
+      mode: replicated
+      replicas: 3
+
+  haproxy:
+    image: dockercloud/haproxy
+    depends_on:
+      - scout
+    environment:
+      - BALANCE=source
+      - ADDITIONAL_SERVICES=project_dir:scout
+
+    ports:
+      - 8080:80
+      - 8081:1936
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - scout
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+
+networks:
+  scout:
+    driver: overlay
+
