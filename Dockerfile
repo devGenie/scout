@@ -1,6 +1,5 @@
 
 FROM idoall/ubuntu16.04-golang:1.4
-MAINTAINER Couchbase Docker Team <docker@couchbase.com>
 
 # Install dependencies:
 #  runit: for container process management
@@ -16,7 +15,7 @@ MAINTAINER Couchbase Docker Team <docker@couchbase.com>
 #  numactl: numactl
 RUN apt-get update && \
     apt-get install -yq runit wget python-httplib2 chrpath tzdata \
-    lsof lshw sysstat net-tools numactl  && \
+    lsof lshw sysstat net-tools numactl  sudo&& \
     apt-get autoremove && apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -27,6 +26,11 @@ ARG CB_SHA256=949b1ded72776a557b9cd3ac89253a4fe6aed079966a4057c5aec41ae5a30ece
 
 ENV PATH=$PATH:/opt/couchbase/bin:/opt/couchbase/bin/tools:/opt/couchbase/bin/install
 
+RUN apt-get update
+RUN apt-get install bison -y
+RUN curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer --output gvm-installer
+RUN chmod a+x gvm-installer
+RUN ./gvm-installer
 # Create Couchbase user with UID 1000 (necessary to match default
 # boot2docker UID)
 RUN groupadd -g 1000 couchbase && useradd couchbase -u 1000 -g couchbase -M
@@ -51,8 +55,6 @@ RUN ln -s dummy.sh /usr/local/bin/iptables-save && \
 
 # Fix curl RPATH
 RUN chrpath -r '$ORIGIN/../lib' /opt/couchbase/bin/curl
-RUN mkdir /scout
-WORKDIR /scout
 
 
 # Add bootstrap script
@@ -75,5 +77,12 @@ CMD ["couchbase-server"]
 # 18094: Full-text Search (SSL) (4.5+)
 # 18095: Analytics (SSL) (5.5+)
 # 18096: Eventing (SSL) (5.5+)
+
+RUN ["/bin/bash", "-c", "source /root/.gvm/scripts/gvm && gvm install go1.12.5"]
+RUN echo "gvm use go1.12.5" >> /root/.bashrc
+
+RUN mkdir -p /root/.gvm/pkgsets/go1.12.5/global/src/scout
+WORKDIR /root/.gvm/pkgsets/go1.12.5/global/src/scout
+
 EXPOSE 8091 8092 8093 8094 8095 8096 11207 11210 11211 18091 18092 18093 18094 18095 18096
 VOLUME /opt/couchbase/var
