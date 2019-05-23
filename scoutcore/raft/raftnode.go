@@ -25,6 +25,7 @@ type RaftNode struct {
 	network       string
 	raftPort      int
 	bindPort      int
+	voterPort     int
 	broadcastPort int
 	role          string
 	store         *RaftStore
@@ -36,7 +37,7 @@ type RaftNode struct {
 	couchbaseNode *scout.CouchbaseNode
 }
 
-func NewNode(raftPort int, bindPort int, datacenter string, couchbaseNode *scout.CouchbaseNode) *RaftNode {
+func NewNode(raftPort int, bindPort int, voterPort int, datacenter string, couchbaseNode *scout.CouchbaseNode) *RaftNode {
 	hostname := scoutcore.HostName()
 	ipaddr := scoutcore.IPAddr()
 	node := &RaftNode{
@@ -45,6 +46,7 @@ func NewNode(raftPort int, bindPort int, datacenter string, couchbaseNode *scout
 		store:         new(RaftStore),
 		fsm:           new(FSM),
 		raftPort:      raftPort,
+		voterPort:     voterPort,
 		bindPort:      bindPort,
 		broadcastPort: 1300,
 		network:       datacenter,
@@ -97,15 +99,14 @@ func (node *RaftNode) Run() error {
 	return nil
 }
 
-func (node *RaftNode) joinCluster(remote string) {
+func (node *RaftNode) joinCluster(remote string) error {
 	fmt.Println("Joining ", remote)
 	nodes := []string{remote}
 	_, err := node.serfScout.Join(nodes, false)
 
 	if err != nil {
 		fmt.Println("error joing peer")
-		log.Fatal(err)
-		return
+		return err
 	}
 
 	fmt.Println("Adding node to ", remote)
@@ -113,12 +114,11 @@ func (node *RaftNode) joinCluster(remote string) {
 
 	if err != nil {
 		log.Println("Error adding this node to cluster")
-		log.Fatalln(err)
-		return
+		return err
 	}
 
 	log.Println("Node successfully added to cluster")
-
+	return nil
 }
 func (node *RaftNode) broadcast() {
 
@@ -258,7 +258,7 @@ func (node *RaftNode) ticker() {
 
 			if memberEvent, ok := voterEvent.(serf.MemberEvent); ok {
 				for _, member := range memberEvent.Members {
-					changedPeer := member.Addr.String() + ":" + strconv.Itoa(int(member.Port+1))
+					changedPeer := member.Addr.String() + ":" + strconv.Itoa(node.raftPort)
 
 					if memberEvent.EventType() == serf.EventMemberJoin {
 						if isleader == true {
