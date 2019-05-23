@@ -18,14 +18,14 @@ func (node *CouchbaseNode) BoootStrap() error {
 
 	log.Println("Setting up services")
 	requestBody := make(map[string]string)
-	requestBody["service"] = "kv,n1q1,index,fts"
+	requestBody["services"] = "kv,n1ql,index,fts"
 	remoteEndpoint := fmt.Sprintf("http://%s:8091/node/controller/setupServices", node.Address)
 
-	err := SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
+	respcode, body, err := SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
 
-	if err != nil {
-		log.Fatalln("error setting up services")
-		return err
+	if err != nil || respcode != 200 {
+		errMsg := fmt.Sprintf("error setting up services : %s", body)
+		return fmt.Errorf(errMsg)
 	}
 
 	requestBody = make(map[string]string)
@@ -34,11 +34,11 @@ func (node *CouchbaseNode) BoootStrap() error {
 	requestBody["port"] = "SAME"
 	remoteEndpoint = fmt.Sprintf("http://%s:8091/settings/web", node.Address)
 
-	err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
+	respcode, body, err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
 
-	if err != nil {
-		log.Fatalln("error initializing node")
-		return err
+	if err != nil || respcode != 200 {
+		errMsg := fmt.Sprintf("error initializing node : %s", body)
+		return fmt.Errorf(errMsg)
 	}
 
 	fmt.Println("1: initializing local node node")
@@ -47,11 +47,11 @@ func (node *CouchbaseNode) BoootStrap() error {
 	requestBody["index_path"] = "/opt/couchbase/var/lib/couchbase/data"
 	remoteEndpoint = fmt.Sprintf("http://%s:8091/nodes/self/controller/settings", node.Address)
 
-	err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
+	respcode, body, err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
 
-	if err != nil {
-		log.Fatalln("error initializing node node")
-		return err
+	if err != nil || respcode != 200 {
+		errMsg := fmt.Sprintf("error initializing node : %s", body)
+		return fmt.Errorf(errMsg)
 	}
 
 	fmt.Println("2: renaming node")
@@ -59,11 +59,11 @@ func (node *CouchbaseNode) BoootStrap() error {
 	requestBody["hostname"] = node.Hostname
 	remoteEndpoint = fmt.Sprintf("http://%s:8091/node/controller/rename", node.Address)
 
-	err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
+	respcode, body, err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
 
-	if err != nil {
-		log.Fatalln("error renaming node")
-		return err
+	if err != nil || respcode != 200 {
+		errMsg := fmt.Sprintf("error renaming node : %s", body)
+		return fmt.Errorf(errMsg)
 	}
 
 	log.Println("4: enabling autofail over")
@@ -72,11 +72,11 @@ func (node *CouchbaseNode) BoootStrap() error {
 	requestBody["timeout"] = "3600"
 	remoteEndpoint = fmt.Sprintf("http://%s:8091/settings/autoFailover", node.Address)
 
-	err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
+	respcode, body, err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
 
-	if err != nil {
-		log.Fatalln("error initializing node node")
-		return err
+	if err != nil || respcode != 200 {
+		errMsg := fmt.Sprintf("error initializing node node : %s", body)
+		return fmt.Errorf(errMsg)
 	}
 
 	log.Println("5: creating default buckets")
@@ -92,11 +92,10 @@ func (node *CouchbaseNode) BoootStrap() error {
 
 	remoteEndpoint = fmt.Sprintf("http://%s:8091/pools/default/buckets", node.Address)
 
-	err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
-
-	if err != nil {
-		log.Fatalln("error initializing node node")
-		return err
+	respcode, body, err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
+	if err != nil || respcode != 202 {
+		errMsg := fmt.Sprintf("error initializing node node : %s", body)
+		return fmt.Errorf(errMsg)
 	}
 
 	return nil
@@ -107,13 +106,14 @@ func (node *CouchbaseNode) AddNode(remoteAddress string) error {
 	requestBody["hostname"] = node.Hostname
 	requestBody["user"] = node.Auth.Username
 	requestBody["password"] = node.Auth.Password
+	requestBody["services"] = "kv,n1ql,index,fts"
 	remoteEndpoint := fmt.Sprintf("http://%s/controller/addNode", remoteAddress)
 
-	err := SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
+	respcode, body, err := SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
 
-	if err != nil {
-		log.Fatalln("error initializing node node")
-		return err
+	if err != nil || respcode != 200 {
+		errMsg := fmt.Sprintf("error adding node : %s", body)
+		return fmt.Errorf(errMsg)
 	}
 
 	return nil

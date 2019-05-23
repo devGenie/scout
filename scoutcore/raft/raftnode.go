@@ -54,7 +54,7 @@ func NewNode(raftPort int, bindPort int, datacenter string, couchbaseNode *scout
 	return node
 }
 
-func (node *RaftNode) Run() {
+func (node *RaftNode) Run() error {
 	memberlistConfig := memberlist.DefaultLANConfig()
 	memberlistConfig.BindAddr = node.ipaddress
 	memberlistConfig.BindPort = node.bindPort
@@ -68,32 +68,33 @@ func (node *RaftNode) Run() {
 
 	serfScout, err := serf.Create(serfConfig)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	node.serfScout = serfScout
 	node.store.raftAddr = fmt.Sprintf("%s:%d", node.ipaddress, node.raftPort)
 
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 
 	node.store.dbPath = "/etc/"
 
 	err = node.store.Init()
 	if err != nil {
-		return
+		return err
 	}
 
 	err = node.store.BootstrapStore()
 	if err != nil {
-		return
+		return err
 	}
 
 	node.waiter.Add(2)
 	go node.listenUDP()
 	go node.ticker()
 	node.waiter.Wait()
+	return nil
 }
 
 func (node *RaftNode) joinCluster(remote string) {

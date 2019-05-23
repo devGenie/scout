@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 const (
@@ -79,37 +81,39 @@ func Decode(dataStructure interface{}, data []byte) error {
 	return nil
 }
 
-func SendRequest(verb string, remoteEndpoint string, requestBody map[string]string, auth Auth) error {
+func SendRequest(verb string, remoteEndpoint string, requestBody map[string]string, auth Auth) (respCode int, response string, err error) {
 	rawBody := make([]string, 0)
 
 	for key, value := range requestBody {
-		data := fmt.Sprintf("%s=%s", key, value)
-		data = url.QueryEscape(data)
+		data := fmt.Sprintf("%s=%s", key, url.QueryEscape(value))
 		rawBody = append(rawBody, data)
 	}
 	body := strings.Join(rawBody, "&")
-	fmt.Println(body)
 	reader := strings.NewReader(body)
 	req, err := http.NewRequest(verb, remoteEndpoint, reader)
 
 	if err != nil {
 		log.Fatalln("An error occured while performing this request")
 		log.Fatal(err)
-		return err
+		return 0, "", err
 	}
 
 	req.SetBasicAuth(auth.Username, auth.Password)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req)
+	httpClient := http.Client{
+		Timeout: time.Second * 30,
+	}
 
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		log.Println("An error occured while perfoming this request")
 		log.Fatal(err)
-		return err
+		return 0, "", err
 	}
 
-	log.Println(resp)
 	defer resp.Body.Close()
-	return nil
+
+	respBody, err := ioutil.ReadAll(resp.Body)
+	return resp.StatusCode, string(respBody), nil
 }
