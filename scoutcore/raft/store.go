@@ -1,7 +1,6 @@
 package scoutcore
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -11,19 +10,24 @@ import (
 )
 
 type RaftStore struct {
-	dbPath   string
-	raftAddr string
-	raft     *raft.Raft
-	config   *raft.Config
+	dbPath          string
+	raftAddr        string
+	raft            *raft.Raft
+	raftDB          *raftboltdb.BoltStore
+	snapshotStore   *raft.FileSnapshotStore
+	transport       *raft.NetworkTransport
+	config          *raft.Config
+	localMembership raft.Configuration
 }
 
 func (store *RaftStore) Init() error {
 	raftDB, err := raftboltdb.NewBoltStore(store.dbPath + "/raft.db")
-
 	if err != nil {
 		log.Fatal(err)
 		return err
 	}
+
+	store.raftDB = raftDB
 
 	snapshotStore, err := raft.NewFileSnapshotStore(store.dbPath, 1, os.Stdout)
 
@@ -32,30 +36,28 @@ func (store *RaftStore) Init() error {
 		return err
 	}
 
+	store.snapshotStore = snapshotStore
+
 	trans, err := raft.NewTCPTransport(store.raftAddr, nil, 3, 10*time.Second, os.Stdout)
 	if err != nil {
 		log.Fatal(err)
 		return err
 	}
+	store.transport = trans
 
 	store.config = raft.DefaultConfig()
 	store.config.LogOutput = os.Stdout
 	store.config.LocalID = raft.ServerID(store.raftAddr)
 
-	rafter, err := raft.NewRaft(store.config, &FSM{}, raftDB, raftDB, snapshotStore, trans)
+	rafter, err := raft.NewRaft(store.config, &FSM{}, store.raftDB, store.raftDB, store.snapshotStore, store.transport)
 
 	if err != nil {
 		log.Fatal(err)
 		return err
 	}
-	fmt.Println("Finished initializing")
 	store.raft = rafter
 
-	return nil
-}
-
-func (store *RaftStore) BootstrapStore() error {
-	bootstrapConfig := raft.Configuration{
+	store.localMembership = raft.Configuration{
 		Servers: []raft.Server{
 			{
 				Suffrage: raft.Voter,
@@ -65,10 +67,46 @@ func (store *RaftStore) BootstrapStore() error {
 		},
 	}
 
-	raftFuture := store.raft.BootstrapCluster(bootstrapConfig)
+	return nil
+}
+
+func (store *RaftStore) BootstrapStore() error {
+
+	raftFuture := store.raft.BootstrapCluster(store.localMembership)
 	if err := raftFuture.Error(); err != nil {
-		log.Fatal("Error bootstrapping cluster: ", err)
 		return err
 	}
+	return nil
+}
+
+func (store *RaftStore) Reset() error {
+	err := store.transport.Close()
+	if err != nil {
+		return err
+	}
+
+	shutdownFuture := store.raft.Shutdown()
+	if err := shutdownFuture.Error(); err != nil {
+		return err
+	}
+
+	transport, err := raft.NewTCPTransport(store.raftAddr, nil, 3, 10*time.Second, os.Stdout)
+	if err != nil {
+		return err
+	}
+	store.transport = transport
+
+	err = raft.RecoverCluster(store.config, &FSM{}, store.raftDB, store.raftDB, store.snapshotStore, store.transport, store.localMembership)
+	if err != nil {
+		return err
+	}
+
+	newRaft, err := raft.NewRaft(store.config, &FSM{}, store.raftDB, store.raftDB, store.snapshotStore, store.transport)
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+	store.raft = newRaft
+
 	return nil
 }
