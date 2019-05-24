@@ -239,6 +239,15 @@ func (node *RaftNode) ticker() {
 				log.Println("node is a leader")
 			} else {
 				log.Println("node is a follower")
+				leaderLastSeen := node.store.raft.LastContact()
+
+				if time.Since(leaderLastSeen) > 10*time.Second {
+					err := node.store.Reset()
+
+					if err != nil {
+						fmt.Println(err)
+					}
+				}
 			}
 
 			futureConfig := node.store.raft.GetConfiguration()
@@ -252,6 +261,7 @@ func (node *RaftNode) ticker() {
 			for _, server := range config.Servers {
 				fmt.Println(server.Address)
 			}
+
 		case voterEvent := <-node.serfEvents:
 			fmt.Println("processing voter event ", voterEvent)
 			isleader := node.IsLeader()
