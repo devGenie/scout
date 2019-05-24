@@ -40,8 +40,8 @@ func (node *CouchbaseNode) BoootStrap(username string, password string, port int
 	respcode, body, err := SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
 
 	if err != nil || respcode != 200 {
-		//errMsg := fmt.Sprintf("error setting up services : %s", body)
-		//return fmt.Errorf(errMsg)
+		errMsg := fmt.Sprintf("error setting up services : %s", body)
+		return fmt.Errorf(errMsg)
 	}
 
 	requestBody = make(map[string]string)
@@ -66,8 +66,8 @@ func (node *CouchbaseNode) BoootStrap(username string, password string, port int
 	respcode, body, err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
 
 	if err != nil || respcode != 200 {
-		//errMsg := fmt.Sprintf("error initializing node : %s", body)
-		//return fmt.Errorf(errMsg)
+		errMsg := fmt.Sprintf("error initializing node : %s", body)
+		return fmt.Errorf(errMsg)
 	}
 
 	fmt.Println("2: renaming node")
@@ -78,8 +78,8 @@ func (node *CouchbaseNode) BoootStrap(username string, password string, port int
 	respcode, body, err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
 
 	if err != nil || respcode != 200 {
-		//errMsg := fmt.Sprintf("error renaming node : %s", body)
-		//return fmt.Errorf(errMsg)
+		errMsg := fmt.Sprintf("error renaming node : %s", body)
+		return fmt.Errorf(errMsg)
 	}
 
 	log.Println("4: enabling autofail over")
@@ -91,8 +91,8 @@ func (node *CouchbaseNode) BoootStrap(username string, password string, port int
 	respcode, body, err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
 
 	if err != nil || respcode != 200 {
-		//errMsg := fmt.Sprintf("error initializing node node : %s", body)
-		//return fmt.Errorf(errMsg)
+		errMsg := fmt.Sprintf("error initializing node node : %s", body)
+		return fmt.Errorf(errMsg)
 	}
 
 	// log.Println("5: creating default buckets")
