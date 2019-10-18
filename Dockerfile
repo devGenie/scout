@@ -1,5 +1,5 @@
 
-FROM idoall/ubuntu16.04-golang:1.4
+FROM idoall/ubuntu16.04-golang
 
 # Install dependencies:
 #  runit: for container process management
@@ -57,10 +57,6 @@ RUN ln -s dummy.sh /usr/local/bin/iptables-save && \
 RUN chrpath -r '$ORIGIN/../lib' /opt/couchbase/bin/curl
 
 
-# Add bootstrap script
-COPY scripts/entrypoint.sh /
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["couchbase-server"]
 
 # 8091: Couchbase Web console, REST/HTTP interface
 # 8092: Views, queries, XDCR
@@ -81,8 +77,17 @@ CMD ["couchbase-server"]
 RUN ["/bin/bash", "-c", "source /root/.gvm/scripts/gvm && gvm install go1.12.5"]
 RUN echo "gvm use go1.12.5" >> /root/.bashrc
 
+# Add bootstrap script
+COPY scripts/entrypoint.sh /
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["couchbase-server"]
+
 RUN mkdir -p /root/.gvm/pkgsets/go1.12.5/global/src/scout
 WORKDIR /root/.gvm/pkgsets/go1.12.5/global/src/scout
 
-EXPOSE 8091 8092 8093 8094 8095 8096 11207 11210 11211 18091 18092 18093 18094 18095 18096
+COPY ./scout .
+COPY ./config.yml /etc/config.yml
+#RUN ["/bin/bash", "-c", "source /root/.gvm/scripts/gvm && gvm use go1.12.5 && rm go.sum && go build ."]
+
+EXPOSE 8091 8092 8093 8094 8095 8096 11207 11210 11211 18091 18092 18093 18094 18095 18096 8600
 VOLUME /opt/couchbase/var
