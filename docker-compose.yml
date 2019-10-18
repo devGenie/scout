@@ -1,37 +1,38 @@
 version: '3'
 services:
+  consul: 
+    image: consul
+    command: "agent -server -bootstrap -ui -client=0.0.0.0"
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+    ports:
+      - 8500:8500
+      - 8600:8600
+
   scout: 
-    image: scout
-    volumes:
-      - .:/scout
+    image: devgenie/scout:hashi
+    hostname: scout.internal
+    depends_on:
+      - consul
     environment:
       - SERVICE_PORTS=8091
-    networks:
-      - scout
-    deploy:
-      mode: replicated
-      replicas: 3
-
-  haproxy:
-    image: dockercloud/haproxy
-    depends_on:
-      - scout
-    environment:
-      - BALANCE=source
-      - ADDITIONAL_SERVICES=project_dir:scout
-
     ports:
-      - 8080:80
-      - 8081:1936
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - scout
-    deploy:
-      placement:
-        constraints: [node.role == manager]
-
-networks:
-  scout:
-    driver: overlay
-
+      - 8091:8091
+  scout2: 
+    image: devgenie/scout:hashi
+    hostname: scout2.internal
+    depends_on:
+      - consul
+    environment:
+      - SERVICE_PORTS=8091
+    ports:
+      - 8092:8091
+  scout3: 
+    image: devgenie/scout:hashi
+    hostname: scout3.internal
+    depends_on:
+      - consul
+    environment:
+      - SERVICE_PORTS=8091
+    ports:
+      - 8093:8091
