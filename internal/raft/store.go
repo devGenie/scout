@@ -1,4 +1,4 @@
-package scoutcore
+package raft
 
 import (
 	"log"

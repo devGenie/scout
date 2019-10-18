@@ -1,4 +1,4 @@
-package scoutcore
+package couchbase
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -37,7 +37,6 @@ func IPAddr() string {
 	}
 
 	for _, addr := range addrs {
-
 		if ipv4 := addr.To4(); ipv4 != nil {
 			if !ipv4.IsLoopback() {
 				return ipv4.String()
@@ -48,11 +47,16 @@ func IPAddr() string {
 }
 
 func HostName() string {
-	hostname, err := os.Hostname()
+	cmd := exec.Command("/bin/hostname", "-f")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
 	if err != nil {
 		panic(err)
 	}
-	return hostname
+	fqdn := out.String()
+	fqdn = fqdn[:len(fqdn)-1]
+	return fqdn
 }
 
 func Encode(dataStructure interface{}) (encoded []byte, err error) {

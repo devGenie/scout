@@ -1,8 +1,9 @@
-package scoutcore
+package couchbase
 
 import (
 	"fmt"
 	"log"
+	"strconv"
 )
 
 type Config struct {
@@ -14,14 +15,31 @@ type Config struct {
 	RaftMemberPort int
 	RaftVoterPort  int
 	Services       string
-	Datacenter     string
+	Discovery      []Discovery `yaml:"discovery"`
 }
+
+type Discovery struct {
+	Mode string `yaml:"mode"`
+	Join string `yaml:"join"`
+}
+
 type CouchbaseNode struct {
 	// Hold configurations for ciouchbase node
 	Auth     Auth
 	Address  string
 	Hostname string
 	port     int
+}
+
+type BucketConfig struct {
+	flushEnabled   int
+	threadsNumber  int
+	replicaIndex   int
+	replicaNumber  int
+	evictionPolicy string
+	ramQuotaMB     int
+	bucketType     string
+	name           string
 }
 
 func (node *CouchbaseNode) BoootStrap(username string, password string, port int, services string) error {
@@ -39,11 +57,6 @@ func (node *CouchbaseNode) BoootStrap(username string, password string, port int
 
 	respcode, body, err := SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
 
-	if err != nil || respcode != 200 {
-		errMsg := fmt.Sprintf("error setting up services : %s", body)
-		return fmt.Errorf(errMsg)
-	}
-
 	requestBody = make(map[string]string)
 	requestBody["password"] = node.Auth.Password
 	requestBody["username"] = node.Auth.Username
@@ -57,7 +70,7 @@ func (node *CouchbaseNode) BoootStrap(username string, password string, port int
 		return fmt.Errorf(errMsg)
 	}
 
-	fmt.Println("1: initializing local node node")
+	fmt.Println("1: initializing local node")
 	requestBody = make(map[string]string)
 	requestBody["data_path"] = "/opt/couchbase/var/lib/couchbase/data"
 	requestBody["index_path"] = "/opt/couchbase/var/lib/couchbase/data"
@@ -95,25 +108,6 @@ func (node *CouchbaseNode) BoootStrap(username string, password string, port int
 		return fmt.Errorf(errMsg)
 	}
 
-	// log.Println("5: creating default buckets")
-	// requestBody = make(map[string]string)
-	// requestBody["flushEnabled"] = "1"
-	// requestBody["threadsNumber"] = "3"
-	// requestBody["replicaIndex"] = "0"
-	// requestBody["replicaNumber"] = "0"
-	// requestBody["evictionPolicy"] = "valueOnly"
-	// requestBody["ramQuotaMB"] = "100"
-	// requestBody["bucketType"] = "membase"
-	// requestBody["name"] = "default"
-
-	// remoteEndpoint = fmt.Sprintf("http://%s:8091/pools/default/buckets", node.Address)
-
-	// respcode, body, err = SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
-	// if err != nil || respcode != 202 {
-	// 	errMsg := fmt.Sprintf("error initializing node node : %s", body)
-	// 	return fmt.Errorf(errMsg)
-	// }
-
 	return nil
 }
 
@@ -133,4 +127,46 @@ func (node *CouchbaseNode) AddNode(remoteAddress string) error {
 	}
 
 	return nil
+}
+
+func (node *CouchbaseNode) AddBucket(bucket BucketConfig) error {
+	requestBody := make(map[string]string)
+	requestBody["flushEnabled"] = strconv.Itoa(bucket.flushEnabled)
+	requestBody["threadsNumber"] = strconv.Itoa(bucket.threadsNumber)
+	requestBody["replicaIndex"] = strconv.Itoa(bucket.replicaIndex)
+	requestBody["replicaNumber"] = strconv.Itoa(bucket.replicaNumber)
+	requestBody["evictionPolicy"] = bucket.evictionPolicy
+	requestBody["ramQuotaMB"] = strconv.Itoa(bucket.ramQuotaMB)
+	requestBody["bucketType"] = bucket.bucketType
+	requestBody["name"] = bucket.name
+
+	remoteEndpoint := fmt.Sprintf("http://%s:8091/pools/default/buckets", node.Address)
+
+	respcode, body, err := SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
+	if err != nil || respcode != 202 {
+		errMsg := fmt.Sprintf("error initializing node node : %s", body)
+		return fmt.Errorf(errMsg)
+	}
+	return nil
+}
+
+func (node *CouchbaseNode) Rebalance() error {
+	// remoteEndpoint := fmt.Sprintf("http://%s:8091/controller/rebalance", node.Address)
+
+	// respcode, body, err := SendRequest("POST", remoteEndpoint, requestBody, node.Auth)
+	// if err != nil || respcode != 202 {
+	// 	errMsg := fmt.Sprintf("error initializing node : %s", body)
+	// 	return fmt.Errorf(errMsg)
+	// }
+
+	return nil
+}
+
+func (node *CouchbaseNode) RebalanceStatus() int {
+
+	return -1
+}
+
+func (dicoveryMode Discovery) Type() Discovery {
+	return dicoveryMode
 }

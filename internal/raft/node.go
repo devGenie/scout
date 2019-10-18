@@ -1,13 +1,14 @@
-package scoutcore
+package raft
 
 import (
 	"fmt"
 	"log"
 	"net"
 	"os"
-	"scout/scoutcore"
-	scout "scout/scoutcore"
+	"github.com/devgenie/scout/internal/consul"
+	"github.com/devgenie/scout/internal/couchbase"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,12 +35,13 @@ type RaftNode struct {
 	serfEvents    chan serf.Event
 	serfScout     *serf.Serf
 	waiter        sync.WaitGroup
-	couchbaseNode *scout.CouchbaseNode
+	couchbaseNode *couchbase.CouchbaseNode
+	discovery     couchbase.Discovery
 }
 
-func NewNode(raftPort int, bindPort int, voterPort int, datacenter string, couchbaseNode *scout.CouchbaseNode) *RaftNode {
-	hostname := scoutcore.HostName()
-	ipaddr := scoutcore.IPAddr()
+func NewNode(raftPort int, bindPort int, voterPort int, couchbaseNode *couchbase.CouchbaseNode, discoveryMode couchbase.Discovery) *RaftNode {
+	hostname := couchbase.HostName()
+	ipaddr := couchbase.IPAddr()
 	node := &RaftNode{
 		hostname:      hostname,
 		ipaddress:     ipaddr,
@@ -49,9 +51,10 @@ func NewNode(raftPort int, bindPort int, voterPort int, datacenter string, couch
 		voterPort:     voterPort,
 		bindPort:      bindPort,
 		broadcastPort: 1300,
-		network:       datacenter,
+		//network:       datacenter,
 		serfEvents:    make(chan serf.Event, 16),
 		couchbaseNode: couchbaseNode,
+		discovery:     discoveryMode,
 	}
 	return node
 }
@@ -80,7 +83,7 @@ func (node *RaftNode) Run() error {
 		return err
 	}
 
-	node.store.dbPath = "/etc/"
+	node.store.dbPath = "/tmp/"
 
 	err = node.store.Init()
 	if err != nil {
@@ -92,10 +95,48 @@ func (node *RaftNode) Run() error {
 		return err
 	}
 
-	node.waiter.Add(2)
-	go node.listenUDP()
+	node.waiter.Add(1)
+
+	if node.discovery.Mode == "consul" {
+		node.findWithConsul()
+	}
+	// go node.listenUDP()
 	go node.ticker()
+	go couchbase.RunWebServer()
 	node.waiter.Wait()
+	return nil
+}
+
+func (node *RaftNode) findWithConsul() error {
+	client, err := consul.NewConsulClient(node.discovery.Join, node.ipaddress, node.hostname)
+
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	tries := 0
+
+	for tries < 10 {
+		host, err := client.FetchRandomHost()
+		if err != nil {
+			log.Println(err)
+		}
+
+		if len(strings.TrimSpace(host)) != 0 {
+			err = node.joinCluster(host)
+			if err != nil {
+				log.Println("Error joining cluster", err)
+			}
+			break
+		}
+		log.Println("Did not find a living node, sleeping for 3 seconds before retrying")
+		time.Sleep(3 * time.Second)
+		tries++
+	}
+
+	log.Println("Failed to find a living node, I will become the leader")
+	client.RegisterHost()
 	return nil
 }
 
@@ -127,31 +168,31 @@ func (node *RaftNode) broadcast() {
 
 	broadcastUDPAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", bcast.String(), node.broadcastPort))
 
-	packet := new(scoutcore.Packet)
-	packet.Header = scoutcore.HELLO
+	packet := new(couchbase.Packet)
+	packet.Header = couchbase.HELLO
 
-	encodedPacket, err := scoutcore.Encode(packet)
+	encodedPacket, err := couchbase.Encode(packet)
 	if err != nil {
 		log.Fatal("error decoding packet ", err)
 	}
 	log.Println("Broadcast address ", broadcastUDPAddr)
-	n, err := node.udpConn.WriteToUDP(encodedPacket, broadcastUDPAddr)
+	_, err = node.udpConn.WriteToUDP(encodedPacket, broadcastUDPAddr)
 
 	if err != nil {
 		fmt.Println("error sending Broadcast message")
 		log.Fatalln(err)
 	}
-	fmt.Println(n)
 }
 
 func (node *RaftNode) listenUDP() {
 	defer node.waiter.Done()
-	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", "0.0.0.0", node.broadcastPort))
+	fmt.Println(node.broadcastPort)
+	udpAddr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", "0.0.0.0", node.broadcastPort))
 	if err != nil {
 		fmt.Println("error parsing broadcast IP address")
 		log.Fatal(err)
 	}
-	udpConn, err := net.ListenUDP("udp", udpAddr)
+	udpConn, err := net.ListenUDP("udp4", udpAddr)
 	if err != nil {
 		fmt.Println("error dialing UDP address")
 	}
@@ -170,22 +211,22 @@ func (node *RaftNode) listenUDP() {
 			continue
 		}
 
-		packet := new(scout.Packet)
-		err = scout.Decode(packet, buffer[:length])
+		packet := new(couchbase.Packet)
+		err = couchbase.Decode(packet, buffer[:length])
 
 		if err != nil {
 			log.Fatalf("error decoding packet from %s \t Error: %s \n", addr.String(), err)
 		}
 
 		switch packet.Header {
-		case scout.HELLO:
+		case couchbase.HELLO:
 			remoteAddr := addr.IP.String()
 			if remoteAddr != node.ipaddress {
 				node.processHandshake(addr)
 			}
-		case scout.HELLOREPLY:
+		case couchbase.HELLOREPLY:
 			remoteIP := string(packet.Payload)
-			fmt.Println("eecieved broadcast reply from", remoteIP)
+			fmt.Println("recieved broadcast reply from", remoteIP)
 			node.joinCluster(remoteIP)
 		default:
 			fmt.Println("expected headers not found")
@@ -208,11 +249,11 @@ func (node *RaftNode) processHandshake(addr *net.UDPAddr) {
 	isleader := node.IsLeader()
 
 	if isleader {
-		packet := new(scout.Packet)
-		packet.Header = scout.HELLOREPLY
+		packet := new(couchbase.Packet)
+		packet.Header = couchbase.HELLOREPLY
 		packet.Payload = []byte(node.ipaddress)
 
-		encodedPacket, err := scout.Encode(packet)
+		encodedPacket, err := couchbase.Encode(packet)
 
 		if err != nil {
 			fmt.Println(err)
