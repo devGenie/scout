@@ -56,4 +56,5 @@ overridePort "ssl_proxy_upstream_port"
     exec /usr/sbin/runsvdir-start
 }
 
+exec /root/.gvm/pkgsets/go1.12.5/global/src/scout/scout
 exec "$@"
