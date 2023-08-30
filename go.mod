@@ -9,5 +9,5 @@ require (
 	github.com/hashicorp/raft-boltdb v0.0.0-20190605210249-ef2e128ed477
 	github.com/hashicorp/serf v0.8.3
 	github.com/xgfone/netaddr v0.4.1
-	gopkg.in/yaml.v3 v3.0.0-20190705120443-117fdf03f45f
+	gopkg.in/yaml.v3 v3.0.0
 )
